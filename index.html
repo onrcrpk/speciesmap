@@ -341,10 +341,7 @@ if (bounds.isValid()) {
 }
 
 
-
-
 function generateLegend(recordings, orderedSubspeciesList) {
-    
     // Create a Set to hold all unique subspecies from both the API data and the ioc.list
     const allSubspeciesSet = new Set([
         ...orderedSubspeciesList.map(entry => entry.split(' ').slice(-1)[0]),  // Get the last word
@@ -359,15 +356,15 @@ function generateLegend(recordings, orderedSubspeciesList) {
         const div = L.DomUtil.create('div', 'info legend');
         // Loop through the merged subspecies list to generate the legend items
         allSubspeciesArray.forEach(subspecies => {
+            // Count occurrences of this subspecies
+            const count = recordings.filter(recording => (recording.ssp || "undefined") === subspecies).length;
             // Assuming you have a getColor function to get the color based on the subspecies order
-            div.innerHTML += `<i style="background:${getColor(subspecies)}"></i> ${subspecies}<br>`;
+            div.innerHTML += `<i style="background:${getColor(subspecies)}"></i> ${subspecies} (${count})<br>`;
         });
         return div;
     };
     newLegend.addTo(map);
     legend = newLegend;  // Now this line is updating the outer legend variable
-
-
 }
 
 
