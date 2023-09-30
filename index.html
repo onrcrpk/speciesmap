@@ -196,120 +196,134 @@ document.getElementById('toggleLayerButton').addEventListener('click', toggleKmz
 
 
 
-
         function plotData(recordings, orderedSubspeciesList) {
-    // Group recordings by coordinates
-    const groupedRecordings = recordings.reduce((groups, recording) => {
-        const lat = parseFloat(recording.lat);
-        const lng = parseFloat(recording.lng);
-        if (
-            isNaN(lat) || lat < -90 || lat > 90 ||
-            isNaN(lng) || lng < -180 || lng > 180
-        ) {
-            console.error('Invalid coordinates for recording:', recording);
-            return groups;  // Skip this recording and proceed to the next one
-        }
+    const groupedRecordings = groupRecordingsByCoordinates(recordings);
 
-        const key = `${lat},${lng}`;
-        if (!groups[key]) {
-            groups[key] = [];
-        }
-        groups[key].push(recording);
-        return groups;
-    }, {});
-
-    // Process each group of recordings
     Object.entries(groupedRecordings).forEach(([key, group]) => {
         const [lat, lng] = key.split(',').map(Number);
 
         const zIndexOffset = group.some(recording => recording.ssp) ? 1000 : 0;
-        // Calculate the frequency of each subspecies
-        const subspeciesFrequency = group.reduce((freq, recording) => {
-            const subspecies = recording.ssp || "undefined";
-            if (!freq[subspecies]) {
-                freq[subspecies] = 0;
-            }
-            freq[subspecies]++;
-            return freq;
-        }, {});
+        const subspeciesFrequency = calculateSubspeciesFrequency(group);
+        const pieData = preparePieData(subspeciesFrequency, group.length);
 
-        // Prepare the data for the pie chart segments
-        const totalRecordings = group.length;
-        const pieData = Object.entries(subspeciesFrequency).map(([subspecies, count]) => {
-            return {
-                ssp: subspecies,
-                color: getColor(subspecies),
-                value: count / totalRecordings  // Fraction of recordings for this subspecies
-            };
-        });
+        // Sort, create canvas, draw pie chart, create Leaflet marker, and add it to map
+        drawPieChartAndCreateMarker(lat, lng, pieData, zIndexOffset, group);
+    });
 
-                // Sort pieData so that subspecies come first, and undefined comes last
-                pieData.sort((a, b) => {
-            if (a.ssp === 'undefined') return 1;
-            if (b.ssp === 'undefined') return -1;
-            return 0;
-        });
+    adjustMapView();
+}
 
-        // Create a canvas element for the pie chart marker
-        const canvas = document.createElement("canvas");
-        canvas.width = 17;
-        canvas.height = 17;
-        const ctx = canvas.getContext("2d");
+function groupRecordingsByCoordinates(recordings) {
+    return recordings.reduce((groups, recording) => {
+        const lat = parseFloat(recording.lat);
+        const lng = parseFloat(recording.lng);
 
-        // Draw the outer circle
-        const outerRadius = 7.5;
+        if (isValidCoordinate(lat, lng)) {
+            const key = `${lat},${lng}`;
+            groups[key] = groups[key] || [];
+            groups[key].push(recording);
+        } else {
+            console.error('Invalid coordinates for recording:', recording);
+        }
+        
+        return groups;
+    }, {});
+}
+
+function isValidCoordinate(lat, lng) {
+    return !(
+        isNaN(lat) || lat < -90 || lat > 90 ||
+        isNaN(lng) || lng < -180 || lng > 180
+    );
+}
+
+function calculateSubspeciesFrequency(group) {
+    return group.reduce((freq, recording) => {
+        const subspecies = recording.ssp || "undefined";
+        freq[subspecies] = (freq[subspecies] || 0) + 1;
+        return freq;
+    }, {});
+}
+
+function preparePieData(subspeciesFrequency, totalRecordings) {
+    const pieData = Object.entries(subspeciesFrequency).map(([subspecies, count]) => {
+        return {
+            ssp: subspecies,
+            color: getColor(subspecies),
+            value: count / totalRecordings
+        };
+    });
+
+    return pieData.sort((a, b) => {
+        if (a.ssp === 'undefined') return 1;
+        if (b.ssp === 'undefined') return -1;
+        return 0;
+    });
+}
+
+
+
+function drawPieChartAndCreateMarker(lat, lng, pieData, zIndexOffset, group) {
+    const canvas = document.createElement("canvas");
+    canvas.width = 15;  // Updated width
+    canvas.height = 15; // Updated height
+
+    drawPieChart(canvas, pieData);
+
+    const icon = L.divIcon({
+        className: "pie-chart-marker",
+        html: `<img src="${canvas.toDataURL()}" width="15" height="15" />`,  // Updated image dimensions
+    });
+
+    const info = group.map(recording =>
+        `<strong>Species: ${recording.gen} ${recording.sp}</strong><br>Subspecies: ${recording.ssp || "N/A"}`).join('<hr>');
+
+    const marker = L.marker([lat, lng], { icon: icon, zIndexOffset: zIndexOffset });
+    marker.bindPopup(info);
+    marker.addTo(markerGroup);
+}
+
+function drawPieChart(canvas, pieData) {
+    const ctx = canvas.getContext("2d");
+
+    const OUTER_RADIUS = 6.5;  // Adjusted radius
+    ctx.beginPath();
+    ctx.arc(7.5, 7.5, OUTER_RADIUS, 0, 2 * Math.PI);  // Adjusted arc center
+    ctx.fillStyle = "none";
+    ctx.strokeStyle = "black";
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    let startAngle = -Math.PI / 2;
+    pieData.forEach((slice) => {
+        const sliceAngle = slice.value * 2 * Math.PI;
         ctx.beginPath();
-        ctx.arc(8.5, 8.5, outerRadius, 0, 2 * Math.PI);
-        ctx.fillStyle = "none";
-        ctx.strokeStyle = "black";
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
+        ctx.moveTo(7.5, 7.5);  // Adjusted move to center
 
-        // Draw the pie chart slices
-        let startAngle = -Math.PI / 2;  // Start at the top (12 o'clock)
-        pieData.forEach((slice) => {
-            const sliceAngle = slice.value * 2 * Math.PI;  // Use slice.value to calculate the slice angle
-            ctx.beginPath();
-            ctx.moveTo(8.5, 8.5);
-            const innerRadius = 6.5;
-            ctx.arc(8.5, 8.5, innerRadius, startAngle, startAngle + sliceAngle);
-            ctx.closePath();
-            ctx.fillStyle = slice.color;
-            ctx.fill();
-            startAngle += sliceAngle;  // Update the start angle for the next slice
-        });
+        const INNER_RADIUS = 5.5;  // Adjusted inner radius
+        ctx.arc(7.5, 7.5, INNER_RADIUS, startAngle, startAngle + sliceAngle);  // Adjusted arc center
+        ctx.closePath();
+        ctx.fillStyle = slice.color;
+        ctx.fill();
+        startAngle += sliceAngle;
+    });
+}
 
-        // Create the Leaflet marker with the pie chart icon
-        const icon = L.divIcon({
-            className: "pie-chart-marker",
-            html: `<img src="${canvas.toDataURL()}" width="17" height="17" />`,
-        });
 
-        // Create a string with all species/subspecies info for the popup
-        const info = group.map(recording => 
-            `<strong>Species: ${recording.gen} ${recording.sp}</strong><br>Subspecies: ${recording.ssp || "N/A"}`).join('<hr>');
 
-        // Create and add the marker to the map
-        const marker = L.marker([lat, lng], { icon: icon, zIndexOffset: zIndexOffset });
-        marker.bindPopup(info);
-        marker.addTo(markerGroup);  // Add to markerGroup instead of map
-
-            // Get the geographical bounds of the marker group
+function adjustMapView() {
     const bounds = markerGroup.getBounds();
 
-// Check if bounds are valid (i.e., the marker group is not empty)
-if (bounds.isValid()) {
-    // Adjust the map view to ensure all markers are visible
-    map.fitBounds(bounds);
-
-    
-
-} else {
-    console.warn('No markers to fit bounds to.');
+    if (bounds.isValid()) {
+        map.fitBounds(bounds);
+    } else {
+        console.warn('No markers to fit bounds to.');
+    }
 }
 
-        });
-}
+
+
+        
 
         function generateLegend(recordings, orderedSubspeciesList) {
     const orderedSubspeciesSet = new Set([
