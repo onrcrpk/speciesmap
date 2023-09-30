@@ -128,9 +128,8 @@
 
             // Fetch ioc.json data
             const iocData = await fetchJSON();
-            console.log('ioc.json data:', iocData);
 
-            orderedSubspeciesList = iocData[genus] && iocData[genus][`${genus} ${species}`]; console.log(orderedSubspeciesList);
+            orderedSubspeciesList = iocData[genus] && iocData[genus][`${genus} ${species}`];
             if (!orderedSubspeciesList) {
                 console.error('Could not find subspecies list for', genus, species);
                 return;
@@ -138,7 +137,7 @@
             // Fetch API data
             const response = await fetch(`https://xeno-canto.org/api/2/recordings?query=${genus}%20${species}`);
             const data = await response.json();
-            console.log('API data:', data);
+           
             const recordings = data.recordings;
             uniqueSubspecies = [...new Set(recordings.map(recording => recording.ssp || "undefined"))];
 
@@ -342,27 +341,17 @@ function generateLegend(recordings, orderedSubspeciesList) {
 
 
         function getColor(subspecies) {
-            console.log('Subspecies:', subspecies);  // Log the subspecies
+           
             if (subspecies === "undefined") return "lightgray";
 
             // Create a simplified list of subspecies names
-            console.log('Ordered Subspecies List:', orderedSubspeciesList);
+          
             const simplifiedList = orderedSubspeciesList.map(entry => entry.split(' ').pop().toLowerCase());
-            console.log('Simplified List:', simplifiedList);  // Log the simplified list
 
             // Now find the index of the subspecies within the simplified list
             const index = simplifiedList.indexOf(subspecies.toLowerCase());
-            console.log('Index:', index);  // Log the index
 
             const testList = orderedSubspeciesList.map(entry => entry);
-            console.log('Test List:', testList);
-
-
-
-            console.log('Test Split:', 'Corvus corax principalis'.split(' '));
-            console.log('Test Slice:', 'Corvus corax principalis'.split(' ').slice(-1));
-            console.log('Test Last Word:', 'Corvus corax principalis'.split(' ').slice(-1)[0]);
-
 
 
             if (index === -1) {
