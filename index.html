@@ -311,32 +311,54 @@ if (bounds.isValid()) {
         });
 }
 
-
-function generateLegend(recordings, orderedSubspeciesList) {
-    // Create a Set to hold all unique subspecies from both the API data and the ioc.list
-    const allSubspeciesSet = new Set([
-        ...orderedSubspeciesList.map(entry => entry.split(' ').slice(-1)[0]),  // Get the last word
-        ...recordings.map(recording => recording.ssp || "undefined")
+        function generateLegend(recordings, orderedSubspeciesList) {
+    const orderedSubspeciesSet = new Set([
+        ...orderedSubspeciesList.map(entry => entry.split(' ').slice(-1)[0])  // Get the last word
     ]);
-
-    // Convert the Set back to an array for easier iteration
-    const allSubspeciesArray = Array.from(allSubspeciesSet);
+    const orderedSubspeciesArray = Array.from(orderedSubspeciesSet);
 
     const newLegend = L.control({ position: 'topleft' });
     newLegend.onAdd = function (map) {
         const div = L.DomUtil.create('div', 'info legend');
-        // Loop through the merged subspecies list to generate the legend items
-        allSubspeciesArray.forEach(subspecies => {
-            // Count occurrences of this subspecies
+        let notFoundSubspecies = [];
+
+        // Handling subspecies from the ordered list (IOC)
+        orderedSubspeciesArray.forEach(subspecies => {
             const count = recordings.filter(recording => (recording.ssp || "undefined") === subspecies).length;
-            // Assuming you have a getColor function to get the color based on the subspecies order
-            div.innerHTML += `<i style="background:${getColor(subspecies)}"></i> ${subspecies} (${count})<br>`;
+            if (count > 0) {
+                div.innerHTML += `<i style="background:${getColor(subspecies)}"></i> ${subspecies} (${count})<br>`;
+            } else {
+                notFoundSubspecies.push(subspecies);
+            }
         });
+
+        // Handling "undefined" subspecies in recordings that might not be in orderedSubspeciesList
+        const undefinedCount = recordings.filter(recording => recording.ssp === "" || recording.ssp == null).length;
+        if (undefinedCount > 0) {
+            div.innerHTML += `<i style="background:${getColor("undefined")}"></i> undefined (${undefinedCount})<br>`;
+        }
+
+        // Handling recordings not present in the IOC list and giving them a black color
+        const allRecordedSubspeciesSet = new Set(recordings.map(recording => recording.ssp || "undefined"));
+        allRecordedSubspeciesSet.forEach(recordedSubspecies => {
+            if (!orderedSubspeciesSet.has(recordedSubspecies) && recordedSubspecies !== "undefined") {
+                const count = recordings.filter(recording => (recording.ssp || "undefined") === recordedSubspecies).length;
+                div.innerHTML += `<i style="background:black"></i> ${recordedSubspecies} (${count})<br>`;
+            }
+        });
+
+        // Add a section for not found subspecies without color
+        if (notFoundSubspecies.length > 0) {
+            div.innerHTML += '<strong>Unrecorded Subspecies:</strong><br>';
+            div.innerHTML += notFoundSubspecies.join(', ');
+        }
+
         return div;
     };
     newLegend.addTo(map);
-    legend = newLegend;  // Now this line is updating the outer legend variable
+    legend = newLegend;
 }
+
 
 
 
