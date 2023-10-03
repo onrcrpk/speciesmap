@@ -194,8 +194,7 @@
             // Step 4: Find species names in orderedSubspeciesList but not in recordings
             const missingSpecies = orderedSubspeciesList.filter(speciesName => !uniqueSspValues.includes(speciesName));
 
-            // Log the missing species names
-            console.log("Species names in orderedSubspeciesList but not in recordings:", missingSpecies);
+    
 
 
             updateOrderedSubspeciesList(recordings);
@@ -494,7 +493,7 @@
                 return 'black';  // Return a default color if the subspecies is not found
             }
             const totalSubspecies = orderedSubspeciesList.length;
-            console.log(totalSubspecies)
+           
 
 
             const colorScale = [
