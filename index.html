@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 
@@ -176,39 +175,44 @@
 
             const data = await fetchAPIData(genus, species);
 
-            const recordings = data?.recordings;
+            // Convert the ssp values in recordings to lowercase
+            const recordings = data?.recordings.map(record => ({
+                ...record,
+                ssp: record.ssp ? record.ssp.toLowerCase() : record.ssp
+            }));
 
-// Step 1: Extract all ssp values from recordings
-const sspValues = recordings.map(record => record.ssp);
 
-// Step 2: Create a list of unique ssp values
-const uniqueSspValues = [...new Set(sspValues)];
+            // Step 1: Extract all ssp values from recordings
+            const sspValues = recordings.map(record => record.ssp);
 
-// Step 3: Create a new orderedSubspeciesList with only species present in recordings
-const filteredOrderedSubspeciesList = orderedSubspeciesList.filter(ssp => uniqueSspValues.includes(ssp));
+            // Step 2: Create a list of unique ssp values
+            const uniqueSspValues = [...new Set(sspValues)];
 
-// Step 4: Find species names in orderedSubspeciesList but not in recordings
-const missingSpecies = orderedSubspeciesList.filter(speciesName => !uniqueSspValues.includes(speciesName));
+            // Step 3: Create a new orderedSubspeciesList with only species present in recordings
+            const filteredOrderedSubspeciesList = orderedSubspeciesList.filter(ssp => uniqueSspValues.includes(ssp));
 
-// Log the missing species names
-console.log("Species names in orderedSubspeciesList but not in recordings:", missingSpecies);
+            // Step 4: Find species names in orderedSubspeciesList but not in recordings
+            const missingSpecies = orderedSubspeciesList.filter(speciesName => !uniqueSspValues.includes(speciesName));
+
+            // Log the missing species names
+            console.log("Species names in orderedSubspeciesList but not in recordings:", missingSpecies);
 
 
             updateOrderedSubspeciesList(recordings);
-            
+
             updateKmzLayer(genus, species, map);
 
             plotData(recordings);
 
-            generateLegend(recordings, filteredOrderedSubspeciesList, missingSpecies);       
-         }
+            generateLegend(recordings, filteredOrderedSubspeciesList, missingSpecies);
+        }
 
 
         function updateOrderedSubspeciesList(recordings) {
-    const actualSubspeciesSet = new Set(recordings.map(recording => recording.ssp));
-    orderedSubspeciesList = orderedSubspeciesList.filter(subspecies => actualSubspeciesSet.has(subspecies));
-    totalSubspecies = actualSubspeciesSet.size; // Update totalSubspecies here
-}
+            const actualSubspeciesSet = new Set(recordings.map(recording => recording.ssp));
+            orderedSubspeciesList = orderedSubspeciesList.filter(subspecies => actualSubspeciesSet.has(subspecies));
+            totalSubspecies = actualSubspeciesSet.size; // Update totalSubspecies here
+        }
 
 
 
@@ -342,41 +346,32 @@ console.log("Species names in orderedSubspeciesList but not in recordings:", mis
 
             drawPieChart(canvas, pieData);
 
+            const sspValue = group[0].ssp || "Undefined ssp"; // Use "Undefined ssp" if group.ssp is empty
+
             const icon = L.divIcon({
                 className: "pie-chart-marker",
-                html: `<img src="${canvas.toDataURL()}" width="15" height="15" data-id="${group[0].id}" />`,  // Updated image dimensions and added data-id attribute
+                html: `<img src="${canvas.toDataURL()}" width="15" height="15" data-id="${sspValue}" />`,  // Updated image dimensions and added data-id attribute with sspValue
             });
 
-            // Here we set a default "Loading..." message for the popup.
-            const loadingMessage = "<p>Loading...</p>";
+            // Create an HTML list element to display group.ssp values
+            const sspList = document.createElement("ul");
+            group.forEach(item => {
+                const listItem = document.createElement("li");
+                listItem.textContent = item.ssp || "Undefined ssp"; // Use "Undefined ssp" if item.ssp is empty
+                sspList.appendChild(listItem);
+            });
+
+            // Create a container div for the popup content
+            const popupContent = document.createElement("div");
+            popupContent.appendChild(sspList);
 
             const marker = L.marker([lat, lng], { icon: icon, zIndexOffset: zIndexOffset });
-            marker.bindPopup(loadingMessage);
+            marker.bindPopup(popupContent); // Set the popup content to the created container
             marker.addTo(markerGroup);
-            marker.on('click', onMarkerClick); // Event listener for marker click
         }
 
-        async function onMarkerClick(e) {
-            const marker = e.target;
-            marker.bindPopup("Loading...").openPopup();  // Showing "Loading..." until data is fetched
-            const recordingId = marker._icon.children[0].dataset.id;
-            const apiUrl = `https://www.xeno-canto.org/api/internal/ajax-player?nr=${recordingId}`;
 
-            try {
-                const additionalData = await fetchJSON(apiUrl);
-                console.log("API Response: ", additionalData);
 
-                if (additionalData.content) {
-                    marker.bindPopup(additionalData.content).openPopup();
-                } else {
-                    marker.bindPopup("No additional data available").openPopup();
-                }
-
-            } catch (error) {
-                console.log("API Error: ", error);
-                marker.bindPopup("Error loading data").openPopup();
-            }
-        }
 
 
 
@@ -421,9 +416,9 @@ console.log("Species names in orderedSubspeciesList but not in recordings:", mis
 
 
         function generateLegend(recordings, orderedSubspeciesList, missingSpecies) {
-                        const orderedSubspeciesSet = new Set([
-                ...orderedSubspeciesList.map(entry => entry.split(' ').slice(-1)[0])
-            ]);
+            const orderedSubspeciesSet = new Set(
+                orderedSubspeciesList.map(entry => entry.split(' ').slice(-1)[0].toLowerCase())
+            );
 
             const newLegend = L.control({ position: 'topleft' });
 
@@ -445,7 +440,7 @@ console.log("Species names in orderedSubspeciesList but not in recordings:", mis
 
         function generateLegendForSubspecies(div, orderedSubspeciesSet, recordings, notFoundSubspecies) {
             orderedSubspeciesSet.forEach(subspecies => {
-                const count = recordings.filter(recording => (recording.ssp || "undefined") === subspecies).length;
+                const count = recordings.filter(recording => (recording.ssp || "undefined").toLowerCase() === subspecies.toLowerCase()).length;
                 if (count > 0) {
                     div.innerHTML += `<i style="background:${getColor(subspecies)}"></i> ${subspecies} (${count})<br>`;
                 } else {
@@ -453,6 +448,7 @@ console.log("Species names in orderedSubspeciesList but not in recordings:", mis
                 }
             });
         }
+
 
         function generateLegendForUndefinedSubspecies(div, recordings) {
             const undefinedCount = recordings.filter(recording => !recording.ssp).length;
@@ -471,12 +467,16 @@ console.log("Species names in orderedSubspeciesList but not in recordings:", mis
             });
         }
 
+
+
+
+
         function addUnrecordedSubspeciesSection(div, missingSpecies) {
-    if (missingSpecies && missingSpecies.length > 0) {
-        div.innerHTML += '<strong>Unrecorded Subspecies:</strong><br>';
-        div.innerHTML += missingSpecies.join(', ');
-    }
-}
+            if (missingSpecies && missingSpecies.length > 0) {
+                div.innerHTML += '<strong>Unrecorded Subspecies:</strong><br>';
+                div.innerHTML += missingSpecies.join(', ');
+            }
+        }
 
 
 
@@ -484,24 +484,28 @@ console.log("Species names in orderedSubspeciesList but not in recordings:", mis
             if (subspecies === "undefined") return "lightgray";
 
             // Now find the index of the subspecies within the simplified list
-            const index = orderedSubspeciesList.indexOf(subspecies);
+            // Find the index of the subspecies within the simplified list (case-insensitive)
+            const index = orderedSubspeciesList.findIndex(item => item.toLowerCase() === subspecies.toLowerCase());
+
+
 
             if (index === -1) {
+
                 return 'black';  // Return a default color if the subspecies is not found
             }
             const totalSubspecies = orderedSubspeciesList.length;
-
+            console.log(totalSubspecies)
 
 
             const colorScale = [
-    { r: 255, g: 0,   b: 0   }, // red
-    { r: 65, g: 32,   b: 0   }, // maroon
-    { r: 255, g: 128, b: 0   }, // orange
-    { r: 255, g: 255, b: 0   }, // yellow
-    { r: 65, g: 200, b: 0   }, // intermediate color
-    { r: 0,   g: 50, b: 150 }, // cyan
-    { r: 0,   g: 191, b: 255 }, // blue        
-];
+                { r: 255, g: 0, b: 0 }, // red
+                { r: 65, g: 32, b: 0 }, // maroon
+                { r: 255, g: 128, b: 0 }, // orange
+                { r: 255, g: 255, b: 0 }, // yellow
+                { r: 65, g: 200, b: 0 }, // intermediate color
+                { r: 0, g: 50, b: 150 }, // cyan
+                { r: 0, g: 191, b: 255 }, // blue        
+            ];
 
 
 
