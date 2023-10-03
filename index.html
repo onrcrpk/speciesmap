@@ -33,8 +33,8 @@
         }
 
         .info.legend i {
-            width: 16px;
-            height: 16px;
+            width: 18px;
+            height: 18px;
             float: left;
             margin-right: 8px;
             opacity: 0.7;
@@ -96,6 +96,10 @@
                 <option value="Picus canus">Picus canus</option>
                 <option value="Anser albifrons">Anser albifrons</option>
                 <option value="Eremophila alpestris">Eremophila alpestris</option>
+
+
+
+
             </select>
         </label>
 
@@ -105,79 +109,99 @@
     <script>
 
 
-let orderedSubspeciesList = [];
-let legend;
-let kmzLayer;
+        let orderedSubspeciesList = [];
+        let legend;
+        let kmzLayer;
 
-async function fetchJSON(url) {
-    try {
-        const response = await fetch(url);
-        if (!response.ok) {
-            throw new Error(`HTTP error! Status: ${response.status}`);
+        async function fetchJSON(url) {
+            try {
+                const response = await fetch(url);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! Status: ${response.status}`);
+                }
+                return response.json();
+            } catch (error) {
+                console.error(`Failed to fetch ${url}`, error);
+            }
         }
-        return response.json();
-    } catch (error) {
-        console.error(`Failed to fetch ${url}`, error);
-    }
+
+        async function fetchAPIData(genus, species) {
+            const apiUrl = `https://xeno-canto.org/api/2/recordings?query=${genus}%20${species}`;
+            return fetchJSON(apiUrl);
+        }
+
+        function clearPreviousData(markerGroup, map) {
+            markerGroup.clearLayers();
+            if (legend) {
+                map.removeControl(legend);
+            }
+            if (kmzLayer) {
+                map.removeLayer(kmzLayer);
+                kmzLayer = null;
+            }
+        }
+
+        function validateInput(genus, species) {
+            if (!genus || !species) {
+                alert('Please enter a valid scientific name.');
+                return false;
+            }
+            return true;
+        }
+
+
+        function updateKmzLayer(genus, species, map) {
+            const formattedSpecies = `${genus} ${species}`;
+            const kmzFilename = formattedSpecies.replace(/\s+/g, ' ') + '.kmz';
+            kmzLayer = new L.KMZLayer(kmzFilename);
+            kmzLayer.addTo(map);
+        }
+
+        async function fetchData() {
+            const [genus, species] = document.getElementById('speciesInput').value.split(' ');
+
+            if (!validateInput(genus, species)) return;
+
+            clearPreviousData(markerGroup, map);
+
+            const iocData = await fetchJSON('ioc.json');
+
+            orderedSubspeciesList = iocData?.[genus]?.[`${genus} ${species}`];
+
+            if (!orderedSubspeciesList) {
+                console.error('Could not find subspecies list for', genus, species);
+                return;
+            }
+
+            const data = await fetchAPIData(genus, species);
+
+            const recordings = data?.recordings;
+
+            orderedSubspeciesList = filterOrderedSubspeciesList(recordings, orderedSubspeciesList);
+
+            updateOrderedSubspeciesList(recordings);
+            
+            updateKmzLayer(genus, species, map);
+
+            plotData(recordings);
+
+            generateLegend(recordings, orderedSubspeciesList);
+        }
+
+
+        function updateOrderedSubspeciesList(recordings) {
+    const actualSubspeciesSet = new Set(recordings.map(recording => recording.ssp));
+    orderedSubspeciesList = orderedSubspeciesList.filter(subspecies => actualSubspeciesSet.has(subspecies));
+    totalSubspecies = actualSubspeciesSet.size; // Update totalSubspecies here
 }
 
-async function fetchAPIData(genus, species) {
-    const apiUrl = `https://xeno-canto.org/api/2/recordings?query=${genus}%20${species}`;
-    return fetchJSON(apiUrl);
+function filterOrderedSubspeciesList(recordings, orderedSubspeciesList) {
+    // Identify actual subspecies present in the recordings data
+    const actualSubspeciesSet = new Set(recordings.map(recording => recording.ssp));
+
+    // Filter orderedSubspeciesList to include only actual subspecies
+    return orderedSubspeciesList.filter(subspecies => actualSubspeciesSet.has(subspecies));
 }
-
-function clearPreviousData(markerGroup, map) {
-    markerGroup.clearLayers();
-    if (legend) {
-        map.removeControl(legend);
-    }
-    if (kmzLayer) {
-        map.removeLayer(kmzLayer);
-        kmzLayer = null;
-    }
-}
-
-function validateInput(genus, species) {
-    if (!genus || !species) {
-        alert('Please enter a valid scientific name.');
-        return false;
-    }
-    return true;
-}
-
-function updateKmzLayer(genus, species, map) {
-    const formattedSpecies = `${genus} ${species}`;
-    const kmzFilename = formattedSpecies.replace(/\s+/g, ' ') + '.kmz';
-    kmzLayer = new L.KMZLayer(kmzFilename);
-    kmzLayer.addTo(map);
-}
-
-async function fetchData() {
-    const [genus, species] = document.getElementById('speciesInput').value.split(' ');
-
-    if (!validateInput(genus, species)) return;
-
-    clearPreviousData(markerGroup, map);
-
-    const iocData = await fetchJSON('ioc.json');
-    orderedSubspeciesList = iocData?.[genus]?.[`${genus} ${species}`];
-    if (!orderedSubspeciesList) {
-        console.error('Could not find subspecies list for', genus, species);
-        return;
-    }
-
-    const data = await fetchAPIData(genus, species);
-    const recordings = data?.recordings;
-    const uniqueSubspecies = [...new Set(recordings.map(recording => recording.ssp || "undefined"))];
-
-    updateKmzLayer(genus, species, map);
-
-    plotData(recordings, orderedSubspeciesList);
-    generateLegend(recordings, orderedSubspeciesList);
-}
-
-
-
 
         // Define a variable to track visibility states
         let markersVisible = true;
@@ -221,13 +245,24 @@ async function fetchData() {
 
 
 
-        function plotData(recordings, orderedSubspeciesList) {
-            const groupedRecordings = groupRecordingsByCoordinates(recordings);
+        function plotData(recordings) {
+            // Filter out valid recordings based on isValidCoordinate
+            const validRecordings = recordings.filter((recording) => {
+                const lat = parseFloat(recording.lat);
+                const lng = parseFloat(recording.lng);
+                return isValidCoordinate(lat, lng);
+            });
 
+            // Group valid recordings by coordinates
+            const groupedRecordings = groupRecordingsByCoordinates(validRecordings);
+
+            // Iterate over valid grouped recordings
             Object.entries(groupedRecordings).forEach(([key, group]) => {
                 const [lat, lng] = key.split(',').map(Number);
 
-                const zIndexOffset = group.some(recording => recording.ssp) ? 1000 : 0;
+                const zIndexOffset = group.some((recording) => recording.ssp)
+                    ? 1000
+                    : 0;
                 const subspeciesFrequency = calculateSubspeciesFrequency(group);
                 const pieData = preparePieData(subspeciesFrequency, group.length);
 
@@ -243,24 +278,29 @@ async function fetchData() {
                 const lat = parseFloat(recording.lat);
                 const lng = parseFloat(recording.lng);
 
-                if (isValidCoordinate(lat, lng)) {
-                    const key = `${lat},${lng}`;
-                    groups[key] = groups[key] || [];
-                    groups[key].push(recording);
-                } else {
-                    console.error('Invalid coordinates for recording:', recording);
-                }
+                const key = `${lat},${lng}`;
+                groups[key] = groups[key] || [];
+                groups[key].push(recording);
 
                 return groups;
             }, {});
         }
 
         function isValidCoordinate(lat, lng) {
-            return !(
-                isNaN(lat) || lat < -90 || lat > 90 ||
-                isNaN(lng) || lng < -180 || lng > 180
+            return (
+                !isNaN(lat) &&
+                lat >= -90 &&
+                lat <= 90 &&
+                !isNaN(lng) &&
+                lng >= -180 &&
+                lng <= 180
             );
         }
+
+
+
+
+
 
         function calculateSubspeciesFrequency(group) {
             return group.reduce((freq, recording) => {
@@ -287,47 +327,47 @@ async function fetchData() {
         }
 
         function drawPieChartAndCreateMarker(lat, lng, pieData, zIndexOffset, group) {
-    const canvas = document.createElement("canvas");
-    canvas.width = 15;  // Updated width
-    canvas.height = 15; // Updated height
+            const canvas = document.createElement("canvas");
+            canvas.width = 15;  // Updated width
+            canvas.height = 15; // Updated height
 
-    drawPieChart(canvas, pieData);
+            drawPieChart(canvas, pieData);
 
-    const icon = L.divIcon({
-        className: "pie-chart-marker",
-        html: `<img src="${canvas.toDataURL()}" width="15" height="15" data-id="${group[0].id}" />`,  // Updated image dimensions and added data-id attribute
-    });
+            const icon = L.divIcon({
+                className: "pie-chart-marker",
+                html: `<img src="${canvas.toDataURL()}" width="15" height="15" data-id="${group[0].id}" />`,  // Updated image dimensions and added data-id attribute
+            });
 
-    // Here we set a default "Loading..." message for the popup.
-    const loadingMessage = "<p>Loading...</p>";
+            // Here we set a default "Loading..." message for the popup.
+            const loadingMessage = "<p>Loading...</p>";
 
-    const marker = L.marker([lat, lng], { icon: icon, zIndexOffset: zIndexOffset });
-    marker.bindPopup(loadingMessage);
-    marker.addTo(markerGroup);
-    marker.on('click', onMarkerClick); // Event listener for marker click
-}
-
-async function onMarkerClick(e) {
-    const marker = e.target;
-    marker.bindPopup("Loading...").openPopup();  // Showing "Loading..." until data is fetched
-    const recordingId = marker._icon.children[0].dataset.id;  
-    const apiUrl = `https://www.xeno-canto.org/api/internal/ajax-player?nr=${recordingId}`;
-    
-    try {
-        const additionalData = await fetchJSON(apiUrl);
-        console.log("API Response: ", additionalData);  
-
-        if(additionalData.content) {
-            marker.bindPopup(additionalData.content).openPopup();
-        } else {
-            marker.bindPopup("No additional data available").openPopup();
+            const marker = L.marker([lat, lng], { icon: icon, zIndexOffset: zIndexOffset });
+            marker.bindPopup(loadingMessage);
+            marker.addTo(markerGroup);
+            marker.on('click', onMarkerClick); // Event listener for marker click
         }
 
-    } catch (error) {
-        console.log("API Error: ", error);  
-        marker.bindPopup("Error loading data").openPopup();
-    }
-}
+        async function onMarkerClick(e) {
+            const marker = e.target;
+            marker.bindPopup("Loading...").openPopup();  // Showing "Loading..." until data is fetched
+            const recordingId = marker._icon.children[0].dataset.id;
+            const apiUrl = `https://www.xeno-canto.org/api/internal/ajax-player?nr=${recordingId}`;
+
+            try {
+                const additionalData = await fetchJSON(apiUrl);
+                console.log("API Response: ", additionalData);
+
+                if (additionalData.content) {
+                    marker.bindPopup(additionalData.content).openPopup();
+                } else {
+                    marker.bindPopup("No additional data available").openPopup();
+                }
+
+            } catch (error) {
+                console.log("API Error: ", error);
+                marker.bindPopup("Error loading data").openPopup();
+            }
+        }
 
 
 
@@ -370,81 +410,71 @@ async function onMarkerClick(e) {
             }
         }
 
+
         function generateLegend(recordings, orderedSubspeciesList) {
-    const orderedSubspeciesSet = new Set([
-        ...orderedSubspeciesList.map(entry => entry.split(' ').slice(-1)[0])
-    ]);
+            const orderedSubspeciesSet = new Set([
+                ...orderedSubspeciesList.map(entry => entry.split(' ').slice(-1)[0])
+            ]);
 
-    const newLegend = L.control({ position: 'topleft' });
-    
-    newLegend.onAdd = function (map) {
-        const div = L.DomUtil.create('div', 'info legend');
-        let notFoundSubspecies = [];
+            const newLegend = L.control({ position: 'topleft' });
 
-        generateLegendForSubspecies(div, orderedSubspeciesSet, recordings, notFoundSubspecies);
-        generateLegendForUndefinedSubspecies(div, recordings);
-        generateLegendForUnorderedSubspecies(div, orderedSubspeciesSet, recordings);
-        addUnrecordedSubspeciesSection(div, notFoundSubspecies);
-        
-        return div;
-    };
-    
-    newLegend.addTo(map);
-    legend = newLegend;
-}
+            newLegend.onAdd = function (map) {
+                const div = L.DomUtil.create('div', 'info legend');
+                let notFoundSubspecies = [];
 
-function generateLegendForSubspecies(div, orderedSubspeciesSet, recordings, notFoundSubspecies) {
-    orderedSubspeciesSet.forEach(subspecies => {
-        const count = recordings.filter(recording => (recording.ssp || "undefined") === subspecies).length;
-        if (count > 0) {
-            div.innerHTML += `<i style="background:${getColor(subspecies)}"></i> ${subspecies} (${count})<br>`;
-        } else {
-            notFoundSubspecies.push(subspecies);
+                generateLegendForSubspecies(div, orderedSubspeciesSet, recordings, notFoundSubspecies);
+                generateLegendForUndefinedSubspecies(div, recordings);
+                generateLegendForUnorderedSubspecies(div, orderedSubspeciesSet, recordings);
+                addUnrecordedSubspeciesSection(div, notFoundSubspecies);
+
+                return div;
+            };
+
+            newLegend.addTo(map);
+            legend = newLegend;
         }
-    });
-}
 
-function generateLegendForUndefinedSubspecies(div, recordings) {
-    const undefinedCount = recordings.filter(recording => !recording.ssp).length;
-    if (undefinedCount > 0) {
-        div.innerHTML += `<i style="background:${getColor("undefined")}"></i> undefined (${undefinedCount})<br>`;
-    }
-}
-
-function generateLegendForUnorderedSubspecies(div, orderedSubspeciesSet, recordings) {
-    const allRecordedSubspeciesSet = new Set(recordings.map(recording => recording.ssp || "undefined"));
-    allRecordedSubspeciesSet.forEach(recordedSubspecies => {
-        if (!orderedSubspeciesSet.has(recordedSubspecies) && recordedSubspecies !== "undefined") {
-            const count = recordings.filter(recording => (recording.ssp || "undefined") === recordedSubspecies).length;
-            div.innerHTML += `<i style="background:black"></i> ${recordedSubspecies} (${count})<br>`;
+        function generateLegendForSubspecies(div, orderedSubspeciesSet, recordings, notFoundSubspecies) {
+            orderedSubspeciesSet.forEach(subspecies => {
+                const count = recordings.filter(recording => (recording.ssp || "undefined") === subspecies).length;
+                if (count > 0) {
+                    div.innerHTML += `<i style="background:${getColor(subspecies)}"></i> ${subspecies} (${count})<br>`;
+                } else {
+                    notFoundSubspecies.push(subspecies);
+                }
+            });
         }
-    });
-}
 
-function addUnrecordedSubspeciesSection(div, notFoundSubspecies) {
-    if (notFoundSubspecies.length > 0) {
-        div.innerHTML += '<strong>Unrecorded Subspecies:</strong><br>';
-        div.innerHTML += notFoundSubspecies.join(', ');
-    }
-}
+        function generateLegendForUndefinedSubspecies(div, recordings) {
+            const undefinedCount = recordings.filter(recording => !recording.ssp).length;
+            if (undefinedCount > 0) {
+                div.innerHTML += `<i style="background:${getColor("undefined")}"></i> undefined (${undefinedCount})<br>`;
+            }
+        }
 
+        function generateLegendForUnorderedSubspecies(div, orderedSubspeciesSet, recordings) {
+            const allRecordedSubspeciesSet = new Set(recordings.map(recording => recording.ssp || "undefined"));
+            allRecordedSubspeciesSet.forEach(recordedSubspecies => {
+                if (!orderedSubspeciesSet.has(recordedSubspecies) && recordedSubspecies !== "undefined") {
+                    const count = recordings.filter(recording => (recording.ssp || "undefined") === recordedSubspecies).length;
+                    div.innerHTML += `<i style="background:black"></i> ${recordedSubspecies} (${count})<br>`;
+                }
+            });
+        }
 
-
-
+        function addUnrecordedSubspeciesSection(div, notFoundSubspecies) {
+            if (notFoundSubspecies.length > 0) {
+                div.innerHTML += '<strong>Unrecorded Subspecies:</strong><br>';
+                div.innerHTML += notFoundSubspecies.join(', ');
+            }
+        }
 
 
         function getColor(subspecies) {
             if (subspecies === "undefined") return "lightgray";
 
-            // Create a simplified list of subspecies names
-            const simplifiedList = orderedSubspeciesList.map(entry => entry.split(' ').pop().toLowerCase());
-
             // Now find the index of the subspecies within the simplified list
-            const index = simplifiedList.indexOf(subspecies.toLowerCase());
-
-
-            const testList = orderedSubspeciesList.map(entry => entry);
-
+            const index = orderedSubspeciesList.indexOf(subspecies);
 
             if (index === -1) {
                 console.error('Subspecies not found in orderedSubspeciesList:', subspecies);
@@ -452,13 +482,21 @@ function addUnrecordedSubspeciesSection(div, notFoundSubspecies) {
             }
             const totalSubspecies = orderedSubspeciesList.length;
 
+        console.log(totalSubspecies);
+
+
             const colorScale = [
-                { r: 255, g: 0, b: 0 }, // red
-                { r: 105, g: 0, b: 0 }, // darkred
-                { r: 255, g: 215, b: 0 }, // gold
-                { r: 0, g: 100, b: 0 }, // darkgreen
-                { r: 0, g: 255, b: 255 }, // cyan
-            ];
+    { r: 255, g: 0,   b: 0   }, // red
+    { r: 65, g: 32,   b: 0   }, // maroon
+    { r: 255, g: 128, b: 0   }, // orange
+    { r: 255, g: 255, b: 0   }, // yellow
+    { r: 65, g: 200, b: 0   }, // intermediate color
+    { r: 0,   g: 50, b: 150 }, // cyan
+    { r: 0,   g: 191, b: 255 }, // blue        
+];
+
+
+
 
             if (totalSubspecies <= 1) {
                 // If there's only one subspecies, return the color of the first color in the scale.
@@ -484,10 +522,18 @@ function addUnrecordedSubspeciesSection(div, notFoundSubspecies) {
 
 
 
-        
+
+        function filterOrderedSubspeciesList(recordings, orderedSubspeciesList) {
+    // Identify actual subspecies present in the recordings data
+    const actualSubspeciesSet = new Set(recordings.map(recording => recording.ssp));
+
+    // Filter orderedSubspeciesList to include only actual subspecies
+    return orderedSubspeciesList.filter(subspecies => actualSubspeciesSet.has(subspecies));
+}
 
 
-        
+
+
         // Create a Leaflet map and set the initial view
         var map = L.map('map', {
             worldCopyJump: true,
