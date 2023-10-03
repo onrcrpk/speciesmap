@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 
@@ -177,7 +178,21 @@
 
             const recordings = data?.recordings;
 
-            orderedSubspeciesList = filterOrderedSubspeciesList(recordings, orderedSubspeciesList);
+// Step 1: Extract all ssp values from recordings
+const sspValues = recordings.map(record => record.ssp);
+
+// Step 2: Create a list of unique ssp values
+const uniqueSspValues = [...new Set(sspValues)];
+
+// Step 3: Create a new orderedSubspeciesList with only species present in recordings
+const filteredOrderedSubspeciesList = orderedSubspeciesList.filter(ssp => uniqueSspValues.includes(ssp));
+
+// Step 4: Find species names in orderedSubspeciesList but not in recordings
+const missingSpecies = orderedSubspeciesList.filter(speciesName => !uniqueSspValues.includes(speciesName));
+
+// Log the missing species names
+console.log("Species names in orderedSubspeciesList but not in recordings:", missingSpecies);
+
 
             updateOrderedSubspeciesList(recordings);
             
@@ -185,8 +200,8 @@
 
             plotData(recordings);
 
-            generateLegend(recordings, orderedSubspeciesList);
-        }
+            generateLegend(recordings, filteredOrderedSubspeciesList, missingSpecies);       
+         }
 
 
         function updateOrderedSubspeciesList(recordings) {
@@ -195,13 +210,7 @@
     totalSubspecies = actualSubspeciesSet.size; // Update totalSubspecies here
 }
 
-function filterOrderedSubspeciesList(recordings, orderedSubspeciesList) {
-    // Identify actual subspecies present in the recordings data
-    const actualSubspeciesSet = new Set(recordings.map(recording => recording.ssp));
 
-    // Filter orderedSubspeciesList to include only actual subspecies
-    return orderedSubspeciesList.filter(subspecies => actualSubspeciesSet.has(subspecies));
-}
 
         // Define a variable to track visibility states
         let markersVisible = true;
@@ -411,8 +420,8 @@ function filterOrderedSubspeciesList(recordings, orderedSubspeciesList) {
         }
 
 
-        function generateLegend(recordings, orderedSubspeciesList) {
-            const orderedSubspeciesSet = new Set([
+        function generateLegend(recordings, orderedSubspeciesList, missingSpecies) {
+                        const orderedSubspeciesSet = new Set([
                 ...orderedSubspeciesList.map(entry => entry.split(' ').slice(-1)[0])
             ]);
 
@@ -425,7 +434,7 @@ function filterOrderedSubspeciesList(recordings, orderedSubspeciesList) {
                 generateLegendForSubspecies(div, orderedSubspeciesSet, recordings, notFoundSubspecies);
                 generateLegendForUndefinedSubspecies(div, recordings);
                 generateLegendForUnorderedSubspecies(div, orderedSubspeciesSet, recordings);
-                addUnrecordedSubspeciesSection(div, notFoundSubspecies);
+                addUnrecordedSubspeciesSection(div, missingSpecies);
 
                 return div;
             };
@@ -462,12 +471,13 @@ function filterOrderedSubspeciesList(recordings, orderedSubspeciesList) {
             });
         }
 
-        function addUnrecordedSubspeciesSection(div, notFoundSubspecies) {
-            if (notFoundSubspecies.length > 0) {
-                div.innerHTML += '<strong>Unrecorded Subspecies:</strong><br>';
-                div.innerHTML += notFoundSubspecies.join(', ');
-            }
-        }
+        function addUnrecordedSubspeciesSection(div, missingSpecies) {
+    if (missingSpecies && missingSpecies.length > 0) {
+        div.innerHTML += '<strong>Unrecorded Subspecies:</strong><br>';
+        div.innerHTML += missingSpecies.join(', ');
+    }
+}
+
 
 
         function getColor(subspecies) {
@@ -477,12 +487,10 @@ function filterOrderedSubspeciesList(recordings, orderedSubspeciesList) {
             const index = orderedSubspeciesList.indexOf(subspecies);
 
             if (index === -1) {
-                console.error('Subspecies not found in orderedSubspeciesList:', subspecies);
                 return 'black';  // Return a default color if the subspecies is not found
             }
             const totalSubspecies = orderedSubspeciesList.length;
-
-        console.log(totalSubspecies);
+console.log(totalSubspecies)
 
 
             const colorScale = [
@@ -522,14 +530,6 @@ function filterOrderedSubspeciesList(recordings, orderedSubspeciesList) {
 
 
 
-
-        function filterOrderedSubspeciesList(recordings, orderedSubspeciesList) {
-    // Identify actual subspecies present in the recordings data
-    const actualSubspeciesSet = new Set(recordings.map(recording => recording.ssp));
-
-    // Filter orderedSubspeciesList to include only actual subspecies
-    return orderedSubspeciesList.filter(subspecies => actualSubspeciesSet.has(subspecies));
-}
 
 
 
