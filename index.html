@@ -78,10 +78,12 @@
     <div id="map"></div>
 
     <input type="text" id="speciesInput" placeholder="Enter species">
-    <button onclick="fetchData()">Search</button>
+    <button id="searchButton">Search</button>
 
     <button id="toggleMarkerButton">Toggle Markers</button>
     <button id="toggleLayerButton">Toggle Species Ranges</button>
+
+
 
 
     <!-- Predefined dropdown menu -->
@@ -96,14 +98,13 @@
                 <option value="Picus canus">Picus canus</option>
                 <option value="Anser albifrons">Anser albifrons</option>
                 <option value="Eremophila alpestris">Eremophila alpestris</option>
-
-
-
-
             </select>
         </label>
-
     </div>
+
+
+    <!-- Loading indicator -->
+<div id="loadingIndicator" style="display:none;">Loading...</div>
 
 
     <script>
@@ -162,6 +163,11 @@
 
             if (!validateInput(genus, species)) return;
 
+            // Disable the search button and show the loading indicator
+    document.getElementById('searchButton').disabled = true;
+    document.getElementById('loadingIndicator').style.display = 'block';
+
+
             clearPreviousData(markerGroup, map);
 
             const iocData = await fetchJSON('ioc.json');
@@ -204,6 +210,11 @@
             plotData(recordings);
 
             generateLegend(recordings, filteredOrderedSubspeciesList, missingSpecies);
+
+            // After fetching data, re-enable the search button and hide the loading indicator
+    document.getElementById('searchButton').disabled = false;
+    document.getElementById('loadingIndicator').style.display = 'none';
+
         }
 
 
@@ -599,11 +610,14 @@
             }
         }
 
-        // Attach the event listener for the dropdown menu
-        document.getElementById('speciesSelect').addEventListener('change', handleDropdownChange);
+        document.getElementById('speciesSelect').addEventListener('change', function() {
+    document.getElementById('speciesInput').value = this.value;
+    fetchData();
+});
 
-        // Attach the event listener for the button click
-        document.getElementById('submitButton').addEventListener('click', fetchData);
+document.getElementById('searchButton').addEventListener('click', function() {
+    fetchData();
+});
 
 
 
