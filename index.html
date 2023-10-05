@@ -436,6 +436,7 @@
 
 
         function generateLegend(recordings, orderedSubspeciesList, missingSpecies) {
+                        div.innerHTML += `<strong>Subspecies:</strong><br>`; // Add "Subspecies:" text
             const orderedSubspeciesSet = new Set(
                 orderedSubspeciesList.map(entry => entry.split(' ').slice(-1)[0].toLowerCase())
             );
