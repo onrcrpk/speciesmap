@@ -104,7 +104,7 @@
 
 
     <!-- Loading indicator -->
-<div id="loadingIndicator" style="display:none;">Loading...</div>
+    <div id="loadingIndicator" style="display:none;">Loading...</div>
 
 
     <script>
@@ -164,8 +164,8 @@
             if (!validateInput(genus, species)) return;
 
             // Disable the search button and show the loading indicator
-    document.getElementById('searchButton').disabled = true;
-    document.getElementById('loadingIndicator').style.display = 'block';
+            document.getElementById('searchButton').disabled = true;
+            document.getElementById('loadingIndicator').style.display = 'block';
 
 
             clearPreviousData(markerGroup, map);
@@ -180,24 +180,25 @@
             }
 
             const data = await fetchAPIData(genus, species);
-       
-// Convert the ssp values in recordings to lowercase
-    let recordings = data?.recordings.map(record => ({
-        ...record,
-        ssp: record.ssp ? record.ssp.toLowerCase() : record.ssp
-    }));
 
-    if (!orderedSubspeciesList || orderedSubspeciesList.length === 0) {
-        console.error('Could not find subspecies list for', genus, species);
-        // Handle monotypic species case here
-        orderedSubspeciesList = ['monotypic'];
-        // Modify recordings to set a default ssp value
-        recordings = recordings.map(record => ({
-            ...record,
-            ssp: 'monotypic'
-        }));
-    }
-    
+
+            // Convert the ssp values in recordings to lowercase
+            let recordings = data?.recordings.map(record => ({
+                ...record,
+                ssp: record.ssp ? record.ssp.toLowerCase() : record.ssp
+            }));
+
+            if (!orderedSubspeciesList || orderedSubspeciesList.length === 0) {
+                console.error('Could not find subspecies list for', genus, species);
+                // Handle monotypic species case here
+                orderedSubspeciesList = ['monotypic'];
+                // Modify recordings to set a default ssp value
+                recordings = recordings.map(record => ({
+                    ...record,
+                    ssp: 'monotypic'
+                }));
+            }
+
             // Step 1: Extract all ssp values from recordings
             const sspValues = recordings.map(record => record.ssp);
 
@@ -210,7 +211,7 @@
             // Step 4: Find species names in orderedSubspeciesList but not in recordings
             const missingSpecies = orderedSubspeciesList.filter(speciesName => !uniqueSspValues.includes(speciesName));
 
-    
+
 
 
             updateOrderedSubspeciesList(recordings);
@@ -222,8 +223,8 @@
             generateLegend(recordings, filteredOrderedSubspeciesList, missingSpecies);
 
             // After fetching data, re-enable the search button and hide the loading indicator
-    document.getElementById('searchButton').disabled = false;
-    document.getElementById('loadingIndicator').style.display = 'none';
+            document.getElementById('searchButton').disabled = false;
+            document.getElementById('loadingIndicator').style.display = 'none';
 
         }
 
@@ -436,7 +437,6 @@
 
 
         function generateLegend(recordings, orderedSubspeciesList, missingSpecies) {
-                        div.innerHTML += `<strong>Subspecies:</strong><br>`; // Add "Subspecies:" text
             const orderedSubspeciesSet = new Set(
                 orderedSubspeciesList.map(entry => entry.split(' ').slice(-1)[0].toLowerCase())
             );
@@ -459,7 +459,13 @@
             legend = newLegend;
         }
 
+
+
+
+
+
         function generateLegendForSubspecies(div, orderedSubspeciesSet, recordings, notFoundSubspecies) {
+            div.innerHTML += `<strong>Subspecies:</strong><br>`; // Add "Subspecies:" text
             orderedSubspeciesSet.forEach(subspecies => {
                 const count = recordings.filter(recording => (recording.ssp || "undefined").toLowerCase() === subspecies.toLowerCase()).length;
                 if (count > 0) {
@@ -489,9 +495,6 @@
         }
 
 
-
-
-
         function addUnrecordedSubspeciesSection(div, missingSpecies) {
             if (missingSpecies && missingSpecies.length > 0) {
                 div.innerHTML += '<strong>Unrecorded Subspecies:</strong><br>';
@@ -515,18 +518,18 @@
                 return 'black';  // Return a default color if the subspecies is not found
             }
             const totalSubspecies = orderedSubspeciesList.length;
-           
+
 
 
             const colorScale = [
-    { r: 255, g: 0,   b: 0   }, // red
-    { r: 65, g: 32,   b: 0   }, // maroon
-    { r: 255, g: 128, b: 0   }, // orange
-    { r: 255, g: 255, b: 0   }, // yellow
-    { r: 65, g: 200, b: 0   }, // green
-    { r: 0,   g: 150, b: 255 }, // blue    
-    { r: 0,   g: 0, b: 150 }, // blue-purple    
-];
+                { r: 255, g: 0, b: 0 }, // red
+                { r: 65, g: 32, b: 0 }, // maroon
+                { r: 255, g: 128, b: 0 }, // orange
+                { r: 255, g: 255, b: 0 }, // yellow
+                { r: 65, g: 200, b: 0 }, // green
+                { r: 0, g: 150, b: 255 }, // blue    
+                { r: 0, g: 0, b: 150 }, // blue-purple    
+            ];
 
 
 
@@ -621,14 +624,14 @@
             }
         }
 
-        document.getElementById('speciesSelect').addEventListener('change', function() {
-    document.getElementById('speciesInput').value = this.value;
-    fetchData();
-});
+        document.getElementById('speciesSelect').addEventListener('change', function () {
+            document.getElementById('speciesInput').value = this.value;
+            fetchData();
+        });
 
-document.getElementById('searchButton').addEventListener('click', function() {
-    fetchData();
-});
+        document.getElementById('searchButton').addEventListener('click', function () {
+            fetchData();
+        });
 
 
 
