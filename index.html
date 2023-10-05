@@ -180,14 +180,7 @@
             }
 
             const data = await fetchAPIData(genus, species);
-
-            // Convert the ssp values in recordings to lowercase
-            const recordings = data?.recordings.map(record => ({
-                ...record,
-                ssp: record.ssp ? record.ssp.toLowerCase() : record.ssp
-            }));
-
-            
+       
 // Convert the ssp values in recordings to lowercase
     let recordings = data?.recordings.map(record => ({
         ...record,
