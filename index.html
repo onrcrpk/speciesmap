@@ -187,7 +187,24 @@
                 ssp: record.ssp ? record.ssp.toLowerCase() : record.ssp
             }));
 
+            
+// Convert the ssp values in recordings to lowercase
+    let recordings = data?.recordings.map(record => ({
+        ...record,
+        ssp: record.ssp ? record.ssp.toLowerCase() : record.ssp
+    }));
 
+    if (!orderedSubspeciesList || orderedSubspeciesList.length === 0) {
+        console.error('Could not find subspecies list for', genus, species);
+        // Handle monotypic species case here
+        orderedSubspeciesList = ['monotypic'];
+        // Modify recordings to set a default ssp value
+        recordings = recordings.map(record => ({
+            ...record,
+            ssp: 'monotypic'
+        }));
+    }
+    
             // Step 1: Extract all ssp values from recordings
             const sspValues = recordings.map(record => record.ssp);
 
