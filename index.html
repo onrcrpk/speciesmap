@@ -22,34 +22,40 @@
         }
 
         .info.legend {
-            background-color: white;
-            border: 1px solid black;
-            padding: 10px;
-            max-width: 200px;
-            max-height: 350px;
-            /* You can adjust as per your need */
-            overflow-y: auto;
-            /* Enables vertical scrolling */
-        }
+    background-color: white;
+    border: 1px solid black;
+    padding: 10px;
+    max-width: 200px;
+    max-height: 350px;
+    overflow-y: auto;
+}
 
-        .info.legend i {
-            width: 18px;
-            height: 18px;
-            float: left;
-            margin-right: 8px;
-            opacity: 0.7;
-            border-radius: 50%;
-        }
+.info.legend i {
+    width: 14px;
+    height: 14px;
+    margin-right: 8px;
+    opacity: 0.7;
+    border-radius: 50%;
+    border: 1.75px solid black;
+    display: inline-block;
+    vertical-align: middle; /* Aligns middle of element with middle of line height of its parent */
+}
 
-        .info.legend div {
-            word-wrap: break-word;
-            white-space: normal;
-            overflow: hidden;
-            /* Ensures the overflow within this div is not visible */
-            text-overflow: ellipsis;
-            /* Optional: show ellipsis (...) when text overflows */
-        }
+.info.legend div {
+    word-wrap: break-word;
+    white-space: normal;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: inline-block;
+    vertical-align: middle; /* Aligns middle of element with middle of line height of its parent */
+}
+
+
+
+
     </style>
+
+
 
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.0/jquery.min.js"
@@ -163,6 +169,10 @@
 
             if (!validateInput(genus, species)) return;
 
+
+
+
+
             // Disable the search button and show the loading indicator
             document.getElementById('searchButton').disabled = true;
             document.getElementById('loadingIndicator').style.display = 'block';
@@ -178,15 +188,17 @@
                 console.error('Could not find subspecies list for', genus, species);
                 return;
             }
-
             const data = await fetchAPIData(genus, species);
 
+let recordings = data?.recordings
+    .map(record => ({
+        ...record,
+        ssp: record.ssp ? record.ssp.toLowerCase() : record.ssp,
+        lat: parseFloat(record.lat),
+        lng: parseFloat(record.lng),
+    }))
+    .filter(record => isValidCoordinate(record.lat, record.lng));
 
-            // Convert the ssp values in recordings to lowercase
-            let recordings = data?.recordings.map(record => ({
-                ...record,
-                ssp: record.ssp ? record.ssp.toLowerCase() : record.ssp
-            }));
 
             if (!orderedSubspeciesList || orderedSubspeciesList.length === 0) {
                 console.error('Could not find subspecies list for', genus, species);
@@ -210,8 +222,6 @@
 
             // Step 4: Find species names in orderedSubspeciesList but not in recordings
             const missingSpecies = orderedSubspeciesList.filter(speciesName => !uniqueSspValues.includes(speciesName));
-
-
 
 
             updateOrderedSubspeciesList(recordings);
@@ -333,9 +343,6 @@
 
 
 
-
-
-
         function calculateSubspeciesFrequency(group) {
             return group.reduce((freq, recording) => {
                 const subspecies = recording.ssp || "undefined";
@@ -390,11 +397,6 @@
             marker.bindPopup(popupContent); // Set the popup content to the created container
             marker.addTo(markerGroup);
         }
-
-
-
-
-
 
 
         function drawPieChart(canvas, pieData) {
@@ -460,10 +462,6 @@
         }
 
 
-
-
-
-
         function generateLegendForSubspecies(div, orderedSubspeciesSet, recordings, notFoundSubspecies) {
             div.innerHTML += `<strong>Subspecies:</strong><br>`; // Add "Subspecies:" text
             orderedSubspeciesSet.forEach(subspecies => {
@@ -511,15 +509,11 @@
             // Find the index of the subspecies within the simplified list (case-insensitive)
             const index = orderedSubspeciesList.findIndex(item => item.toLowerCase() === subspecies.toLowerCase());
 
-
-
             if (index === -1) {
-
                 return 'black';  // Return a default color if the subspecies is not found
             }
+
             const totalSubspecies = orderedSubspeciesList.length;
-
-
 
             const colorScale = [
                 { r: 255, g: 0, b: 0 }, // red
@@ -530,9 +524,6 @@
                 { r: 0, g: 150, b: 255 }, // blue    
                 { r: 0, g: 0, b: 150 }, // blue-purple    
             ];
-
-
-
 
             if (totalSubspecies <= 1) {
                 // If there's only one subspecies, return the color of the first color in the scale.
