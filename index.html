@@ -22,37 +22,35 @@
         }
 
         .info.legend {
-    background-color: white;
-    border: 1px solid black;
-    padding: 10px;
-    max-width: 200px;
-    max-height: 350px;
-    overflow-y: auto;
-}
+            background-color: white;
+            border: 1px solid black;
+            padding: 10px;
+            max-width: 200px;
+            max-height: 350px;
+            overflow-y: auto;
+        }
 
-.info.legend i {
-    width: 14px;
-    height: 14px;
-    margin-right: 8px;
-    opacity: 0.7;
-    border-radius: 50%;
-    border: 1.75px solid black;
-    display: inline-block;
-    vertical-align: middle; /* Aligns middle of element with middle of line height of its parent */
-}
+        .info.legend i {
+            width: 12px;
+            height: 12px;
+            margin-right: 8px;
+            opacity: 0.7;
+            border-radius: 50%;
+            border: 1.75px solid black;
+            display: inline-block;
+            vertical-align: middle;
+            /* Aligns middle of element with middle of line height of its parent */
+        }
 
-.info.legend div {
-    word-wrap: break-word;
-    white-space: normal;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    display: inline-block;
-    vertical-align: middle; /* Aligns middle of element with middle of line height of its parent */
-}
-
-
-
-
+        .info.legend div {
+            word-wrap: break-word;
+            white-space: normal;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            display: inline-block;
+            vertical-align: middle;
+            /* Aligns middle of element with middle of line height of its parent */
+        }
     </style>
 
 
@@ -190,14 +188,21 @@
             }
             const data = await fetchAPIData(genus, species);
 
-let recordings = data?.recordings
-    .map(record => ({
-        ...record,
-        ssp: record.ssp ? record.ssp.toLowerCase() : record.ssp,
-        lat: parseFloat(record.lat),
-        lng: parseFloat(record.lng),
-    }))
-    .filter(record => isValidCoordinate(record.lat, record.lng));
+            let recordings = data?.recordings
+                .map(record => ({
+                    ...record,
+                    ssp: record.ssp ? record.ssp.toLowerCase() : record.ssp,
+                    lat: parseFloat(record.lat),
+                    lng: parseFloat(record.lng),
+                }))
+                .filter(record => {
+                    if (!isValidCoordinate(record.lat, record.lng)) {
+                        console.error('Invalid coordinates for species:', record.ssp);
+                        return false;
+                    }
+                    return true;
+                });
+
 
 
             if (!orderedSubspeciesList || orderedSubspeciesList.length === 0) {
@@ -290,15 +295,9 @@ let recordings = data?.recordings
 
 
         function plotData(recordings) {
-            // Filter out valid recordings based on isValidCoordinate
-            const validRecordings = recordings.filter((recording) => {
-                const lat = parseFloat(recording.lat);
-                const lng = parseFloat(recording.lng);
-                return isValidCoordinate(lat, lng);
-            });
 
             // Group valid recordings by coordinates
-            const groupedRecordings = groupRecordingsByCoordinates(validRecordings);
+            const groupedRecordings = groupRecordingsByCoordinates(recordings);
 
             // Iterate over valid grouped recordings
             Object.entries(groupedRecordings).forEach(([key, group]) => {
@@ -565,8 +564,26 @@ let recordings = data?.recordings
         L.control.zoom({ position: 'bottomright' }).addTo(map);
         map.addControl(new L.Control.Fullscreen({ position: 'topright' }));
 
+        var pixel_ratio = parseInt(window.devicePixelRatio) || 1;
+        var max_zoom = 16;
+        var tile_size = 512;
+
+        var gbifTileURL = 'https://tile.gbif.org/3857/omt/{z}/{x}/{y}@{r}x.png?style=gbif-geyser'.replace('{r}', pixel_ratio);
+
+
+        // Define a single tile layer for GBIF
+        var gbifTileLayer = L.tileLayer(gbifTileURL, {
+            attribution: 'Tiles &copy; GBIF',
+            maxZoom: 17, // Adjust maxZoom as needed
+            opacity: 1
+        });
+
+
+
+
         // Define basemap layers with their respective properties
         new L.basemapsSwitcher([
+
             {
                 layer: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
                     attribution: 'Tiles &copy; Esri'
@@ -596,6 +613,11 @@ let recordings = data?.recordings
                 }),
                 icon: 'osm.png',
                 name: 'OSM'
+            },
+            {
+                layer: gbifTileLayer, // Use the gbifTileLayer here
+                icon: 'geyser.png', // You can specify an icon for the GBIF layer
+                name: 'GBIF' // Name of the basemap
             },
         ], { position: 'bottomleft' }).addTo(map);
 
