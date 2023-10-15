@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html lang="en">
+
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Browse by taxonomy</title>
+
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+
+
+
+
+
+    <style>
+        #map {
+            height: 500px;
+            width: 960px;
+        }
+
+        .info.legend {
+            background-color: white;
+            border: 1px solid black;
+            padding: 10px;
+            max-width: 200px;
+            max-height: 350px;
+            overflow-y: auto;
+        }
+
+        .info.legend i {
+            width: 12px;
+            height: 12px;
+            margin-right: 8px;
+            opacity: 0.7;
+            border-radius: 50%;
+            border: 1.75px solid black;
+            display: inline-block;
+            vertical-align: middle;
+            /* Aligns middle of element with middle of line height of its parent */
+        }
+
+        .info.legend div {
+            word-wrap: break-word;
+            white-space: normal;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            display: inline-block;
+            vertical-align: middle;
+            /* Aligns middle of element with middle of line height of its parent */
+        }
+    </style>
+
+
+
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.0/jquery.min.js"
+        integrity="sha512-3gJwYpMe3QewGELv8k/BX9vcqhryRdzRMxVfq6ngyWXwo03GFEzjsUm8Q7RZcHPHksttq7/GFoxjCVUjkjvPdw=="
+        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+    <script src='https://api.mapbox.com/mapbox.js/plugins/leaflet-fullscreen/v1.0.1/Leaflet.fullscreen.min.js'></script>
+    <link href='https://api.mapbox.com/mapbox.js/plugins/leaflet-fullscreen/v1.0.1/leaflet.fullscreen.css'
+        rel='stylesheet' />
+
+    <link rel="stylesheet" href="L.switchBasemap.css">
+
+    <script type="text/javascript" src="L.switchBasemap.js"></script>
+
+    <script src="https://unpkg.com/leaflet-kmz@latest/dist/leaflet-kmz.js"></script>
+
+
+</head>
+</head>
+
+<body>
+
+    <div id="map"></div>
+
+    <input type="text" id="speciesInput" placeholder="Enter species">
+    <button id="searchButton">Search</button>
+
+    <button id="toggleMarkerButton">Toggle Markers</button>
+    <button id="toggleLayerButton">Toggle Species Ranges</button>
+
+
+
+
+    <!-- Predefined dropdown menu -->
+    <div class="toggle-container">
+        <label>
+            <select id="speciesSelect">
+                <option value="" selected disabled>Select species</option>
+                <option value="Corvus brachyrhynchos">Corvus brachyrhynchos</option>
+                <option value="Corvus orru">Corvus orru</option>
+                <option value="Corvus corax">Corvus corax</option>
+                <option value="Corvus splendens">Corvus splendens</option>
+                <option value="Picus canus">Picus canus</option>
+                <option value="Anser albifrons">Anser albifrons</option>
+                <option value="Eremophila alpestris">Eremophila alpestris</option>
+                <option value="Columba leucomela">Columba leucomela</option>
+
+            </select>
+        </label>
+    </div>
+
+    
+    <!-- Loading indicator -->
+    <div id="loadingIndicator" style="display:none;">Loading...</div>
+
+
+    <script>
+
+
+        let orderedSubspeciesList = [];
+        let legend;
+        let kmzLayer;
+
+        async function fetchJSON(url) {
+            try {
+                const response = await fetch(url);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! Status: ${response.status}`);
+                }
+                return response.json();
+            } catch (error) {
+                console.error(`Failed to fetch ${url}`, error);
+            }
+        }
+
+
+
+
+        async function fetchAPIData(genus, species) {
+    const initialApiUrl = `https://xeno-canto.org/api/2/recordings?query=${genus}%20${species}&page=1`;
+    let allData = { recordings: [] }; // Initialize with an empty array
+
+    try {
+        const initialData = await fetchJSON(initialApiUrl);
+        if (!initialData) {
+            return allData; // No data available
+        }
+
+        allData.recordings = allData.recordings.concat(initialData.recordings);
+
+        const numPages = initialData.numPages;
+        console.log('Total number of pages:', numPages);
+
+        // Update the loading indicator to show the loading progress
+        const loadingIndicator = document.getElementById('loadingIndicator');
+        loadingIndicator.innerHTML = `Total page: ${numPages}, Loading...`;
+
+        // Fetch data from subsequent pages if there are more than one page
+        for (let page = 2; page <= numPages; page++) {
+            const pageUrl = `https://xeno-canto.org/api/2/recordings?query=${genus}%20${species}&page=${page}`;
+            const data = await fetchJSON(pageUrl);
+            if (data) {
+                allData.recordings = allData.recordings.concat(data.recordings);
+                console.log('Fetching page:', page);
+                loadingIndicator.innerHTML = `Total page: ${numPages}, Loading page ${page+1}...`;
+            }
+        }
+    } catch (error) {
+        console.error('Failed to fetch data:', error);
+    }
+
+    return allData;
+}
+
+
+
+
+
+        function clearPreviousData(markerGroup, map) {
+            markerGroup.clearLayers();
+            if (legend) {
+                map.removeControl(legend);
+            }
+            if (kmzLayer) {
+                map.removeLayer(kmzLayer);
+                kmzLayer = null;
+            }
+        }
+
+        function validateInput(genus, species) {
+            if (!genus || !species) {
+                alert('Please enter a valid scientific name.');
+                return false;
+            }
+            return true;
+        }
+
+
+        function updateKmzLayer(genus, species, map) {
+            const formattedSpecies = `${genus} ${species}`;
+            const kmzFilename = formattedSpecies.replace(/\s+/g, ' ') + '.kmz';
+            kmzLayer = new L.KMZLayer(kmzFilename);
+            kmzLayer.addTo(map);
+        }
+
+
+
+        async function fetchData() {
+    const [genus, species] = document.getElementById('speciesInput').value.split(' ');
+
+    if (!validateInput(genus, species)) return;
+
+    // Disable the search button and show the loading indicator
+    document.getElementById('searchButton').disabled = true;
+    document.getElementById('loadingIndicator').style.display = 'block';
+
+    clearPreviousData(markerGroup, map);
+
+    const iocData = await fetchJSON('ioc.json');
+    orderedSubspeciesList = iocData?.[genus]?.[`${genus} ${species}`];
+
+    if (!orderedSubspeciesList) {
+        console.error('Could not find subspecies list for', genus, species);
+        return;
+    }
+
+    let recordings = []; // Initialize an empty array to collect all recordings
+
+    try {
+        const data = await fetchAPIData(genus, species);
+
+        recordings = data?.recordings
+            .map(record => ({
+                ...record,
+                ssp: record.ssp ? record.ssp.toLowerCase() : record.ssp,
+                lat: parseFloat(record.lat),
+                lng: parseFloat(record.lng),
+            }))
+            .filter(record => {
+                if (!isValidCoordinate(record.lat, record.lng)) {
+                    return false;
+                }
+                return true;
+            });
+    } catch (error) {
+        console.error('Error fetching data:', error);
+    }
+
+    if (!orderedSubspeciesList || orderedSubspeciesList.length === 0) {
+        console.error('Could not find subspecies list for', genus, species);
+        // Handle monotypic species case here
+        orderedSubspeciesList = ['monotypic'];
+        // Modify recordings to set a default ssp value
+        recordings = recordings.map(record => ({
+            ...record,
+            ssp: 'monotypic'
+        }));
+    }
+
+    // Continue the rest of your code
+
+    // Step 1: Extract all ssp values from recordings
+    const sspValues = recordings.map(record => record.ssp);
+
+    // Step 2: Create a list of unique ssp values
+    const uniqueSspValues = [...new Set(sspValues)];
+
+    // Step 3: Create a new orderedSubspeciesList with only species present in recordings
+    const filteredOrderedSubspeciesList = orderedSubspeciesList.filter(ssp => uniqueSspValues.includes(ssp));
+
+    // Step 4: Find species names in orderedSubspeciesList but not in recordings
+    const missingSpecies = orderedSubspeciesList.filter(speciesName => !uniqueSspValues.includes(speciesName));
+
+    updateOrderedSubspeciesList(recordings);
+    updateKmzLayer(genus, species, map);
+
+    plotData(recordings);
+    generateLegend(recordings, filteredOrderedSubspeciesList, missingSpecies);
+
+    // After fetching and processing data, re-enable the search button and hide the loading indicator
+    document.getElementById('searchButton').disabled = false;
+    document.getElementById('loadingIndicator').style.display = 'none';
+    document.getElementById('loadingIndicator').textContent = 'Loading...'; // Clear the loading indicator content
+
+}
+
+
+
+        function updateOrderedSubspeciesList(recordings) {
+            const actualSubspeciesSet = new Set(recordings.map(recording => recording.ssp));
+            orderedSubspeciesList = orderedSubspeciesList.filter(subspecies => actualSubspeciesSet.has(subspecies));
+            totalSubspecies = actualSubspeciesSet.size; // Update totalSubspecies here
+        }
+
+
+
+        // Define a variable to track visibility states
+        let markersVisible = true;
+        let kmzLayerVisible = true;
+
+        // Function to toggle markers visibility
+        function toggleMarkersVisibility() {
+            if (markersVisible) {
+                // Hide markers by removing them from the map
+                markerGroup.eachLayer((layer) => {
+                    map.removeLayer(layer);
+                });
+            } else {
+                // Show markers by adding them to the map
+                markerGroup.eachLayer((layer) => {
+                    map.addLayer(layer);
+                });
+            }
+            markersVisible = !markersVisible;
+        }
+
+        // Function to toggle KMZ layer visibility
+        function toggleKmzLayerVisibility() {
+            if (kmzLayerVisible) {
+                // Hide the KMZ layer
+                if (kmzLayer) {
+                    map.removeLayer(kmzLayer);
+                }
+            } else {
+                // Show the KMZ layer
+                if (kmzLayer) {
+                    kmzLayer.addTo(map);
+                }
+            }
+            kmzLayerVisible = !kmzLayerVisible;
+        }
+
+        // Attach event listeners to the buttons
+        document.getElementById('toggleMarkerButton').addEventListener('click', toggleMarkersVisibility);
+        document.getElementById('toggleLayerButton').addEventListener('click', toggleKmzLayerVisibility);
+
+
+
+        function plotData(recordings) {
+
+            // Group valid recordings by coordinates
+            const groupedRecordings = groupRecordingsByCoordinates(recordings);
+
+            // Iterate over valid grouped recordings
+            Object.entries(groupedRecordings).forEach(([key, group]) => {
+                const [lat, lng] = key.split(',').map(Number);
+
+                const zIndexOffset = group.some((recording) => recording.ssp)
+                    ? 1000
+                    : 0;
+                const subspeciesFrequency = calculateSubspeciesFrequency(group);
+                const pieData = preparePieData(subspeciesFrequency, group.length);
+
+                // Sort, create canvas, draw pie chart, create Leaflet marker, and add it to map
+                drawPieChartAndCreateMarker(lat, lng, pieData, zIndexOffset, group);
+            });
+
+            adjustMapView();
+        }
+
+        function groupRecordingsByCoordinates(recordings) {
+            return recordings.reduce((groups, recording) => {
+                const lat = parseFloat(recording.lat);
+                const lng = parseFloat(recording.lng);
+
+                const key = `${lat},${lng}`;
+                groups[key] = groups[key] || [];
+                groups[key].push(recording);
+
+                return groups;
+            }, {});
+        }
+
+        function isValidCoordinate(lat, lng) {
+            return (
+                !isNaN(lat) &&
+                lat >= -90 &&
+                lat <= 90 &&
+                !isNaN(lng) &&
+                lng >= -180 &&
+                lng <= 180
+            );
+        }
+
+
+
+        function calculateSubspeciesFrequency(group) {
+            return group.reduce((freq, recording) => {
+                const subspecies = recording.ssp || "undefined";
+                freq[subspecies] = (freq[subspecies] || 0) + 1;
+                return freq;
+            }, {});
+        }
+
+        function preparePieData(subspeciesFrequency, totalRecordings) {
+            const pieData = Object.entries(subspeciesFrequency).map(([subspecies, count]) => {
+                return {
+                    ssp: subspecies,
+                    color: getColor(subspecies),
+                    value: count / totalRecordings
+                };
+            });
+
+            return pieData.sort((a, b) => {
+                if (a.ssp === 'undefined') return 1;
+                if (b.ssp === 'undefined') return -1;
+                return 0;
+            });
+        }
+
+        function drawPieChartAndCreateMarker(lat, lng, pieData, zIndexOffset, group) {
+            const canvas = document.createElement("canvas");
+            canvas.width = 15;  // Updated width
+            canvas.height = 15; // Updated height
+
+            drawPieChart(canvas, pieData);
+
+            const sspValue = group[0].ssp || "Undefined ssp"; // Use "Undefined ssp" if group.ssp is empty
+
+            const icon = L.divIcon({
+                className: "pie-chart-marker",
+                html: `<img src="${canvas.toDataURL()}" width="15" height="15" data-id="${sspValue}" />`,  // Updated image dimensions and added data-id attribute with sspValue
+            });
+
+            // Create an HTML list element to display group.ssp values
+            const sspList = document.createElement("ul");
+            group.forEach(item => {
+                const listItem = document.createElement("li");
+                listItem.textContent = item.ssp || "Undefined ssp"; // Use "Undefined ssp" if item.ssp is empty
+                sspList.appendChild(listItem);
+            });
+
+            // Create a container div for the popup content
+            const popupContent = document.createElement("div");
+            popupContent.appendChild(sspList);
+
+            const marker = L.marker([lat, lng], { icon: icon, zIndexOffset: zIndexOffset });
+            marker.bindPopup(popupContent); // Set the popup content to the created container
+            marker.addTo(markerGroup);
+        }
+
+
+        function drawPieChart(canvas, pieData) {
+          const ctx = canvas.getContext("2d");
+          const centerX = canvas.width / 2;
+          const centerY = canvas.height / 2;
+          const radius = Math.min(centerX, centerY) - 1; // Adjust the -2 as needed
+      
+          // Calculate the total value by summing up all values in pieData
+          const totalValue = pieData.reduce((total, slice) => total + slice.value, 0);
+      
+          let startAngle = -Math.PI / 2;
+          
+          pieData.forEach((slice) => {
+              const sliceAngle = (slice.value / totalValue) * 2 * Math.PI;
+              ctx.beginPath();
+              ctx.moveTo(centerX, centerY);
+              ctx.arc(centerX, centerY, radius, startAngle, startAngle + sliceAngle);
+              ctx.fillStyle = slice.color;
+              ctx.fill();
+              startAngle += sliceAngle;
+          });
+          
+          // Optionally, draw a border around the pie chart
+          ctx.beginPath();
+          ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
+          ctx.strokeStyle = "black";
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+      }
+      
+
+
+
+
+        function adjustMapView() {
+            const bounds = markerGroup.getBounds();
+
+            if (bounds.isValid()) {
+                map.fitBounds(bounds);
+            } else {
+                console.warn('No markers to fit bounds to.');
+            }
+        }
+
+
+        function generateLegend(recordings, orderedSubspeciesList, missingSpecies) {
+            const orderedSubspeciesSet = new Set(
+                orderedSubspeciesList.map(entry => entry.split(' ').slice(-1)[0].toLowerCase())
+            );
+
+            const newLegend = L.control({ position: 'topleft' });
+
+            newLegend.onAdd = function (map) {
+                const div = L.DomUtil.create('div', 'info legend');
+                let notFoundSubspecies = [];
+
+                generateLegendForSubspecies(div, orderedSubspeciesSet, recordings, notFoundSubspecies);
+                generateLegendForUndefinedSubspecies(div, recordings);
+                generateLegendForUnorderedSubspecies(div, orderedSubspeciesSet, recordings);
+                addUnrecordedSubspeciesSection(div, missingSpecies);
+
+                return div;
+            };
+
+            newLegend.addTo(map);
+            legend = newLegend;
+        }
+
+
+        function generateLegendForSubspecies(div, orderedSubspeciesSet, recordings, notFoundSubspecies) {
+            div.innerHTML += `<strong>Subspecies:</strong><br>`; // Add "Subspecies:" text
+            orderedSubspeciesSet.forEach(subspecies => {
+                const count = recordings.filter(recording => (recording.ssp || "undefined").toLowerCase() === subspecies.toLowerCase()).length;
+                if (count > 0) {
+                    div.innerHTML += `<i style="background:${getColor(subspecies)}"></i> ${subspecies} (${count})<br>`;
+                } else {
+                    notFoundSubspecies.push(subspecies);
+                }
+            });
+        }
+
+
+        function generateLegendForUndefinedSubspecies(div, recordings) {
+            const undefinedCount = recordings.filter(recording => !recording.ssp).length;
+            if (undefinedCount > 0) {
+                div.innerHTML += `<i style="background:${getColor("undefined")}"></i> undefined (${undefinedCount})<br>`;
+            }
+        }
+
+        function generateLegendForUnorderedSubspecies(div, orderedSubspeciesSet, recordings) {
+            const allRecordedSubspeciesSet = new Set(recordings.map(recording => recording.ssp || "undefined"));
+            allRecordedSubspeciesSet.forEach(recordedSubspecies => {
+                if (!orderedSubspeciesSet.has(recordedSubspecies) && recordedSubspecies !== "undefined") {
+                    const count = recordings.filter(recording => (recording.ssp || "undefined") === recordedSubspecies).length;
+                    div.innerHTML += `<i style="background:black"></i> ${recordedSubspecies} (${count})<br>`;
+                }
+            });
+        }
+
+
+        function addUnrecordedSubspeciesSection(div, missingSpecies) {
+            if (missingSpecies && missingSpecies.length > 0) {
+                div.innerHTML += '<strong>Unrecorded Subspecies:</strong><br>';
+                div.innerHTML += missingSpecies.join(', ');
+            }
+        }
+
+
+
+        function getColor(subspecies) {
+            if (subspecies === "undefined") return "lightgray";
+
+            // Now find the index of the subspecies within the simplified list
+            // Find the index of the subspecies within the simplified list (case-insensitive)
+            const index = orderedSubspeciesList.findIndex(item => item.toLowerCase() === subspecies.toLowerCase());
+
+            if (index === -1) {
+                return 'black';  // Return a default color if the subspecies is not found
+            }
+
+            const totalSubspecies = orderedSubspeciesList.length;
+
+            const colorScale = [
+                { r: 255, g: 0, b: 0 }, // red
+                { r: 65, g: 32, b: 0 }, // maroon
+                { r: 255, g: 128, b: 0 }, // orange
+                { r: 255, g: 255, b: 0 }, // yellow
+                { r: 65, g: 200, b: 0 }, // green
+                { r: 0, g: 150, b: 255 }, // blue    
+                { r: 0, g: 0, b: 150 }, // blue-purple    
+            ];
+
+            if (totalSubspecies <= 1) {
+                // If there's only one subspecies, return the color of the first color in the scale.
+                return `rgb(${colorScale[0].r}, ${colorScale[0].g}, ${colorScale[0].b})`;
+            }
+
+            const segment = (totalSubspecies - 1) / (colorScale.length - 1);
+            const lowerIndex = Math.floor(index / segment);
+            const upperIndex = Math.min(lowerIndex + 1, colorScale.length - 1);
+            const t = (index - lowerIndex * segment) / segment;
+
+            if (!colorScale[lowerIndex] || !colorScale[upperIndex]) {
+                console.error('Color scale index out of bounds:', { lowerIndex, upperIndex, colorScale });
+                return 'black';  // Return a default color if there's an error
+            }
+
+            const r = colorScale[lowerIndex].r + (colorScale[upperIndex].r - colorScale[lowerIndex].r) * t;
+            const g = colorScale[lowerIndex].g + (colorScale[upperIndex].g - colorScale[lowerIndex].g) * t;
+            const b = colorScale[lowerIndex].b + (colorScale[upperIndex].b - colorScale[lowerIndex].b) * t;
+
+            return `rgb(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)})`;
+        }
+
+
+
+
+
+
+
+        // Create a Leaflet map and set the initial view
+        var map = L.map('map', {
+            worldCopyJump: true,
+            zoomControl: false, // default zoom control is on the left top.
+            wheelPxPerZoomLevel: 120 // Default is 60, try doubling to decrease sensitivity
+        }).setView([35, 15], 2);
+
+
+        L.control.scale({ metric: true, imperial: false, position: 'bottomright' }).addTo(map);
+        L.control.zoom({ position: 'bottomright' }).addTo(map);
+        map.addControl(new L.Control.Fullscreen({ position: 'topright' }));
+
+        var pixel_ratio = parseInt(window.devicePixelRatio) || 1;
+        var max_zoom = 16;
+        var tile_size = 512;
+
+        var gbifTileURL = 'https://tile.gbif.org/3857/omt/{z}/{x}/{y}@{r}x.png?style=gbif-geyser'.replace('{r}', pixel_ratio);
+
+
+        // Define a single tile layer for GBIF
+        var gbifTileLayer = L.tileLayer(gbifTileURL, {
+            attribution: 'Tiles &copy; GBIF',
+            maxZoom: 17, // Adjust maxZoom as needed
+            opacity: 1
+        });
+
+
+
+
+        // Define basemap layers with their respective properties
+        new L.basemapsSwitcher([
+
+            {
+                layer: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
+                    attribution: 'Tiles &copy; Esri'
+                }).setOpacity(0.9).addTo(map),//DEFAULT MAP
+                maxZoom: 17,
+                icon: 'terrain.jpeg',
+                name: 'Terrain'
+            },
+            {
+                layer: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}', {
+                    attribution: 'Tiles &copy; Esri'
+                }).setOpacity(0.9),
+                icon: 'topo.jpg',
+                name: 'Topographic'
+            },
+            {
+                layer: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+                    attribution: '&copy; <a href="https://stadiamaps.com/">Stadia Maps</a>, &copy; <a href="https://openmaptiles.org/">OpenMapTiles</a> &copy; <a href="http://openstreetmap.org">OpenStreetMap</a> contributors'
+                }).setOpacity(0.9),
+                maxZoom: 21,
+                icon: 'satellite.jpg',
+                name: 'Satellite'
+            },
+            {
+                layer: L.tileLayer('http://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: 'Map data: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors)'
+                }),
+                icon: 'osm.png',
+                name: 'OSM'
+            },
+            {
+                layer: gbifTileLayer, // Use the gbifTileLayer here
+                icon: 'geyser.png', // You can specify an icon for the GBIF layer
+                name: 'GBIF' // Name of the basemap
+            },
+        ], { position: 'bottomleft' }).addTo(map);
+
+
+
+
+
+        let markerGroup = L.featureGroup().addTo(map);  // A FeatureGroup to hold all the markers
+
+
+        // Define a function to handle dropdown menu changes
+        function handleDropdownChange() {
+            const selectedSpecies = document.getElementById('speciesSelect').value;
+            if (selectedSpecies) {
+                document.getElementById('speciesInput').value = selectedSpecies;
+                fetchData();
+            }
+        }
+
+        document.getElementById('speciesSelect').addEventListener('change', function () {
+            document.getElementById('speciesInput').value = this.value;
+            fetchData();
+        });
+
+        document.getElementById('searchButton').addEventListener('click', function () {
+            fetchData();
+        });
+
+
+
+
+
+    </script>
+
+</body>
+
+
+</html>
